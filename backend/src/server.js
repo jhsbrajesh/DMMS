@@ -1,50 +1,16 @@
 require("dotenv").config();
-
-const express = require("express");
-const cors = require("cors");
-const helmet = require("helmet");
-const morgan = require("morgan");
-const { healthCheck } = require("./db");
-const routes = require("./routes");
-
-const app = express();
-const PORT = Number(process.env.PORT) || 3000;
-
-app.use(helmet());
-app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
-app.use(express.json({ limit: "2mb" }));
-app.use(express.urlencoded({ extended: true }));
-app.use(morgan("combined"));
-
-app.get("/", (req, res) => {
-  res.json({
-    application: "DMMS",
-    name: "Department Mail Management System",
-    version: "1.0.0",
-    status: "running",
-  });
-});
-
-app.get("/health", async (req, res) => {
-  try {
-    const database = await healthCheck();
-    res.json({ status: "OK", application: "DMMS", database: "OK", time: database.now });
-  } catch (error) {
-    res.status(503).json({ status: "DEGRADED", application: "DMMS", database: "UNAVAILABLE" });
-  }
-});
-
-app.use("/api", routes);
-
-app.use((err, req, res, next) => {
-  console.error(err);
-  if (err.code === "23505") return res.status(409).json({ error: "A record with the same unique value already exists" });
-  res.status(500).json({ error: "Internal server error" });
-});
-
-app.listen(PORT, () => {
-  console.log("=================================");
-  console.log(" DMMS Server Started Successfully ");
-  console.log("=================================");
-  console.log(`Server URL : http://localhost:${PORT}`);
-});
+const express=require("express");
+const cors=require("cors");
+const helmet=require("helmet");
+const morgan=require("morgan");
+const {healthCheck}=require("./db");
+const routes=require("./routes");
+const adminRoutes=require("./adminRoutes");
+const app=express();
+const PORT=Number(process.env.PORT)||3000;
+app.use(helmet());app.use(cors({origin:process.env.CORS_ORIGIN||"*"}));app.use(express.json({limit:"2mb"}));app.use(express.urlencoded({extended:true}));app.use(morgan("combined"));
+app.get("/",(req,res)=>res.json({application:"DMMS",name:"Department Mail Management System",version:"1.0.0",status:"running"}));
+app.get("/health",async(req,res)=>{try{const d=await healthCheck();res.json({status:"OK",application:"DMMS",database:"OK",time:d.now})}catch(e){res.status(503).json({status:"DEGRADED",application:"DMMS",database:"UNAVAILABLE"})}});
+app.use("/api",routes);app.use("/api/admin",adminRoutes);
+app.use((err,req,res,next)=>{console.error(err);if(err.code==="23505")return res.status(409).json({error:"A record with the same unique value already exists"});res.status(500).json({error:"Internal server error"})});
+app.listen(PORT,()=>console.log(`DMMS server running on http://localhost:${PORT}`));

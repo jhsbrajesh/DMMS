@@ -1,0 +1,72 @@
+name: DMMS CI
+
+on:
+  push:
+    branches: [main, feature/frontend-mvp]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: dmms
+          POSTGRES_DB: dmms
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d dmms"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://postgres:dmms@localhost:5432/dmms
+      JWT_SECRET: ci-only-dmms-secret
+      JWT_EXPIRES_IN: 1h
+      CORS_ORIGIN: http://localhost:5173
+      NODE_ENV: test
+      PORT: 3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Apply database migrations
+        run: for file in sql/*.sql; do PGPASSWORD=dmms psql -h localhost -U postgres -d dmms -v ON_ERROR_STOP=1 -f "$file"; done
+      - run: node --check src/server.js
+      - run: node --check src/routes.js
+      - run: node --check src/auth.js
+      - name: Start API
+        run: node src/server.js > /tmp/dmms-server.log 2>&1 &
+      - name: Wait for API
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:3000/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/dmms-server.log
+          exit 1
+      - name: Run end-to-end API smoke test
+        run: node test/smoke.js
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run build
